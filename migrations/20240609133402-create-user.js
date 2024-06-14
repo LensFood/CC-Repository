@@ -16,7 +16,8 @@ module.exports = {
         type: Sequelize.STRING
       },
       password: {
-        type: Sequelize.STRING // Kolom password dengan tipe STRING
+        allowNull: false,
+        type: Sequelize.STRING
       },
       weight: {
         type: Sequelize.INTEGER

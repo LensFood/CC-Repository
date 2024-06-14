@@ -1,140 +1,143 @@
-const db = require('../models');
-const { admin } = require('../config/firebase');
-const User = db.User;
-const firestore = admin.firestore();
+const { initializeApp } = require('firebase/app');
+const { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } = require('firebase/auth');
+const { getFirestore, doc, setDoc, updateDoc } = require('firebase/firestore'); // Import Firestore
 
-// Register a new User
-exports.registerUser = (req, res) => {
-    // Validate request
-    if (!req.body.email || !req.body.password || !req.body.name || !req.body.weight || !req.body.height) {
-        res.status(400).send({ message: "Name, email, password, weight, and height are required!" });
-        return;
+// Your Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyDQTI06iZgNrPB_DLx4zoa1SPwVEl1Zj-c",
+    authDomain: "lens-food-project.firebaseapp.com",
+    projectId: "lens-food-project",
+    storageBucket: "lens-food-project.appspot.com",
+    messagingSenderId: "628521274677",
+    appId: "1:628521274677:web:5d274e2099b629b08ed07c",
+    measurementId: "G-7878KLB0E7"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app); // Get Firestore service
+
+// Register User
+exports.registUser = (req, res) => {
+    const { email, password, height, weight, name } = req.body;
+    if (!email || !password) {
+        return res.status(400).send({ message: "Email and password are required!" });
     }
 
-    // Check if the email is already registered
-    User.findOne({ where: { email: req.body.email } })
-        .then(user => {
-            if (user) {
-                res.status(400).send({ message: "Email is already in use!" });
-            } else {
-                // Create a new user
-                const newUser = {
-                    name: req.body.name,
-                    email: req.body.email,
-                    password: req.body.password,
-                    weight: req.body.weight,
-                    height: req.body.height
-                };
-
-                // Save the new user to Firestore
-                firestore.collection('users').doc(req.body.email).set(newUser)
-                    .then(() => {
-                        // Save the new user to MySQL
-                        User.create(newUser)
-                            .then(data => {
-                                res.status(201).send(data);
-                            })
-                            .catch(err => {
-                                res.status(500).send({ message: err.message || "Some error occurred while creating the User." });
-                            });
-                    })
-                    .catch(err => {
-                        res.status(500).send({ message: err.message || "Some error occurred while creating the User." });
+    createUserWithEmailAndPassword(auth, email, password)
+    .then((userCredential) => {
+    // Directly use the user object from userCredential
+    const user = userCredential.user;
+    if (user) {
+        // Call updateProfile on the user object directly from userCredential
+        updateProfile(user, {
+            displayName: name
+        }).then(() => {
+            // User's displayName updated
+            const userRef = doc(db, "users", user.uid);
+            setDoc(userRef, {
+                email: email,
+                height: height,
+                weight: weight,
+                // Reminder: It's not recommended to store passwords in Firestore
+                name: name
+            })
+            .then(() => {
+                user.getIdToken().then(idToken => {
+                    res.status(201).send({
+                        message: "User registered successfully",
+                        userId: user.uid,
+                        idToken: idToken,
+                        refreshToken: user.refreshToken,
+                        displayName: user.displayName
                     });
-            }
-        })
-        .catch(err => {
-            res.status(500).send({ message: err.message || "Some error occurred while checking the email." });
+                });
+            })
+            .catch((error) => {
+                res.status(500).send({ message: "Failed to add user data to Firestore: " + error.message });
+            });
+        }).catch((error) => {
+            res.status(500).send({ message: "Failed to update user profile: " + error.message });
         });
+    }
+})
+.catch((error) => {
+    res.status(500).send({ message: error.message });
+});
 };
 
 // Login User
 exports.loginUser = (req, res) => {
-    // Validate request
-    if (!req.body.email || !req.body.password) {
-        res.status(400).send({ message: "Email and password are required!" });
-        return;
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).send({ message: "Email and password are required!" });
     }
 
-    // Find the user by email
-    User.findOne({ where: { email: req.body.email } })
-        .then(user => {
-            if (!user) {
-                res.status(404).send({ message: "User not found!" });
-                return;
-            }
-
-            // Check if the password matches
-            if (user.password !== req.body.password) {
-                res.status(401).send({ message: "Invalid password!" });
-                return;
-            }
-
-            res.send({ message: "Login successful!" });
-        })
-        .catch(err => {
-            res.status(500).send({ message: err.message || "Some error occurred while logging in." });
+    signInWithEmailAndPassword(auth, email, password)
+    .then((userCredential) => {
+        userCredential.user.getIdToken().then(idToken => {
+            res.status(200).send({
+                message: "User logged in successfully",
+                userId: userCredential.user.uid,
+                idToken: idToken,
+                refreshToken: userCredential.user.refreshToken,
+                displayName: userCredential.user.displayName
+            });
         });
-};
-
-// Create and Save a new User
-exports.createUser = (req, res) => {
-    // Validate request
-    if (!req.body.name || !req.body.email || !req.body.weight || !req.body.height) {
-        res.status(400).send({ message: "All fields are required!" });
-        return;
-    }
-
-    // Create a User
-    const user = {
-        name: req.body.name,
-        email: req.body.email,
-        weight: req.body.weight,
-        height: req.body.height
-    };
-
-    // Save User in the database
-    User.create(user)
-        .then(data => {
-            res.status(201).send(data); // Use status 201 for successful creation
-        })
-        .catch(err => {
-            res.status(500).send({ message: err.message || "Some error occurred while creating the User." });
-        });
-};
-
-// Get a User by the id in the request
-exports.getUser = (req, res) => {
-    const id = req.query.id;
-
-    User.findByPk(id)
-        .then(data => {
-            if (!data) {
-                res.status(404).send({ message: "User not found with id=" + id });
-            } else {
-                res.send(data);
-            }
-        })
-        .catch(err => {
-            res.status(500).send({ message: "Error retrieving User with id=" + id });
-        });
-};
-
-// Update a User by the id in the request
-exports.updateUser = (req, res) => {
-    const id = req.query.id;
-
-    User.update(req.body, {
-        where: { id: id }
     })
-        .then(num => {
-            if (num == 1) {
-                res.send({ message: "User was updated successfully." });
-            } else {
-                res.status(404).send({ message: `Cannot update User with id=${id}. User not found or req.body is empty!` });
-            }
-        })
-        .catch(err => {
-            res.status(500).send({ message: "Error updating User with id=" + id });
-        });
+    .catch((error) => {
+        res.status(500).send({ message: error.message });
+    });
 };
+
+exports.updateProfile = async (req, res) => {
+    const { getAuth } = require('firebase-admin/auth');
+
+    const idToken = req.headers.authorization?.split('Bearer ')[1]; // Extract the ID token from the Authorization header
+
+    if (!idToken) {
+        return res.status(401).send({ message: "Unauthorized" });
+    }
+
+    try {
+        // Verify the ID token and extract the user ID
+        const decodedToken = await getAuth().verifyIdToken(idToken);
+        const userId = decodedToken.uid;
+
+        const allowedUpdates = ['name', 'weight', 'height'];
+        const updateData = {};
+
+        // Dynamically build the update object based on the provided fields in the request body
+        Object.keys(req.body).forEach(key => {
+            if (allowedUpdates.includes(key)) {
+                updateData[key] = req.body[key];
+            }
+        });
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).send({ message: "No valid update fields provided" });
+        }
+
+        // Reference to the user document in the 'users' collection
+        const userRef = doc(db, 'users', userId);
+
+        // Perform the update operation
+        await updateDoc(userRef, updateData);
+        res.status(200).send({ message: "User profile updated successfully" });
+    } catch (error) {
+        res.status(500).send({ message: error.message });
+    }
+};
+// Get User Profile
+// exports.getUserProfile = (req, res) => {
+//     const user = req.user;
+//     res.status(200).send({
+//         message: "User profile retrieved successfully",
+//         userId: user.uid,
+//         displayName: user.displayName,
+//         email: user.email,
+//         height: user.height,
+//         weight: user.weight
+//     });
+//};

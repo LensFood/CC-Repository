@@ -1,22 +1,16 @@
-const admin = require('firebase-admin');
+const admin = require('../config/firebaseAdmin'); // Adjust the path as necessary
 
 const verifyToken = async (req, res, next) => {
-    const authorizationHeader = req.headers.authorization;
+  const token = req.headers.authorization?.split('Bearer ')[1];
+  if (!token) return res.status(403).send({ message: 'No token provided.' });
 
-    if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) {
-        return res.status(403).send('Unauthorized - Missing or invalid token format');
-    }
-
-    const idToken = authorizationHeader.split('Bearer ')[1];
-
-    try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        req.user = decodedToken;
-        next();
-    } catch (error) {
-        console.error('Error verifying token:', error);
-        res.status(403).send('Unauthorized - Invalid token');
-    }
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.uid = decodedToken.uid;
+    next();
+  } catch (error) {
+    res.status(403).send({ message: 'Could not verify token.' });
+  }
 };
 
 module.exports = verifyToken;
