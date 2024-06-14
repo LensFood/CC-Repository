@@ -21,9 +21,5 @@ router.get('/profile', verifyToken, async (req, res) => {
   });
 
   router.put('/profile', users.updateProfile);
-// CRUD operations for User
-// router.post('/', verifyToken, users.createUser);
-// router.get('/', verifyToken, users.getUser);
-// router.put('/', verifyToken, users.updateUser);
 
 module.exports = router;
