@@ -91,6 +91,7 @@ exports.loginUser = (req, res) => {
     });
 };
 
+// Edit User Profile
 exports.updateProfile = async (req, res) => {
     const { getAuth } = require('firebase-admin/auth');
 
